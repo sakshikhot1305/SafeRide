@@ -1,0 +1,215 @@
+
+const mongoose = require("mongoose");
+const Driver = require("../models/Driver");
+const User = require("../models/User");
+
+// CREATE DRIVER PROFILE
+const createDriver = async (req, res) => {
+    try {
+        const { userId, licenseNumber, phone, address, busId } = req.body;
+
+        if (!userId || !licenseNumber || !phone || !address) {
+            return res.status(400).json({
+                message: "Required fields are missing"
+            });
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+            return res.status(400).json({
+                message: "Invalid user ID"
+            });
+        }
+
+        const user = await User.findById(userId);
+
+        if (!user || user.role !== "driver") {
+            return res.status(400).json({
+                message: "A valid driver user account is required"
+            });
+        }
+
+        const existingDriver = await Driver.findOne({
+            $or: [
+                { userId },
+                { licenseNumber }
+            ]
+        });
+
+        if (existingDriver) {
+            return res.status(409).json({
+                message: "Driver profile or license number already exists"
+            });
+        }
+
+        if (busId && !mongoose.Types.ObjectId.isValid(busId)) {
+            return res.status(400).json({
+                message: "Invalid bus ID"
+            });
+        }
+
+        const driver = await Driver.create({
+            userId,
+            licenseNumber,
+            phone,
+            address,
+            busId: busId || null
+        });
+
+        return res.status(201).json({
+            message: "Driver profile created successfully",
+            driver
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
+
+// GET ALL DRIVERS
+const getAllDrivers = async (req, res) => {
+    try {
+        const drivers = await Driver.find()
+            .populate("userId", "name email role")
+            .populate("busId");
+
+        return res.status(200).json({
+            count: drivers.length,
+            drivers
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
+
+// GET SINGLE DRIVER
+const getDriverById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                message: "Invalid driver ID"
+            });
+        }
+
+        const driver = await Driver.findById(id)
+            .populate("userId", "name email role")
+            .populate("busId");
+
+        if (!driver) {
+            return res.status(404).json({
+                message: "Driver not found"
+            });
+        }
+
+        return res.status(200).json({ driver });
+    } catch (error) {
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
+
+// UPDATE DRIVER
+const updateDriver = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                message: "Invalid driver ID"
+            });
+        }
+
+        const driver = await Driver.findById(id);
+
+        if (!driver) {
+            return res.status(404).json({
+                message: "Driver not found"
+            });
+        }
+
+        const allowedFields = [
+            "licenseNumber",
+            "phone",
+            "address",
+            "busId",
+            "status"
+        ];
+
+        for (const field of allowedFields) {
+            if (req.body[field] !== undefined) {
+                driver[field] = req.body[field];
+            }
+        }
+
+        if (driver.busId && !mongoose.Types.ObjectId.isValid(driver.busId)) {
+            return res.status(400).json({
+                message: "Invalid bus ID"
+            });
+        }
+
+        await driver.save();
+
+        return res.status(200).json({
+            message: "Driver updated successfully",
+            driver
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
+
+// DELETE DRIVER PROFILE
+const deleteDriver = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                message: "Invalid driver ID"
+            });
+        }
+
+        const driver = await Driver.findById(id);
+
+        if (!driver) {
+            return res.status(404).json({
+                message: "Driver not found"
+            });
+        }
+
+        await driver.deleteOne();
+
+        return res.status(200).json({
+            message: "Driver profile deleted successfully"
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
+
+module.exports = {
+    createDriver,
+    getAllDrivers,
+    getDriverById,
+    updateDriver,
+    deleteDriver
+};

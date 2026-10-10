@@ -1,0 +1,20 @@
+
+# Dependencies
+node_modules/
+backend/node_modules/
+
+# Private environment settings
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local editor and operating system files
+.vscode/
+.DS_Store
+Thumbs.db
