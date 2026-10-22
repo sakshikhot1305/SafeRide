@@ -89,6 +89,38 @@ const getAllDrivers = async (req, res) => {
 };
 
 
+
+// GET DRIVER USERS (registered user accounts with role 'driver')
+const getDriverUsers = async (req, res) => {
+    try {
+        const existingDrivers = await Driver.find().select("userId");
+        const assignedIds = new Set(
+            existingDrivers
+                .filter(d => d.userId)
+                .map(d => d.userId.toString())
+        );
+
+        const users = await User.find({ role: "driver" }).select("_id name email");
+
+        const formatted = users.map(u => ({
+            _id: u._id,
+            name: u.name,
+            email: u.email,
+            isAssigned: assignedIds.has(u._id.toString())
+        }));
+
+        return res.status(200).json({
+            count: formatted.length,
+            users: formatted
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
 // GET SINGLE DRIVER
 const getDriverById = async (req, res) => {
     try {
@@ -262,6 +294,7 @@ const getMyBusStudents = async (req, res) => {
 module.exports = {
     createDriver,
     getAllDrivers,
+    getDriverUsers,
     getDriverById,
     updateDriver,
     deleteDriver,

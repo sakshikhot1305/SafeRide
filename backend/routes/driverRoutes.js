@@ -4,6 +4,7 @@ const express = require("express");
 const {
     createDriver,
     getAllDrivers,
+    getDriverUsers,
     getDriverById,
     updateDriver,
     deleteDriver,
@@ -46,6 +47,15 @@ router.get(
     authMiddleware,
     roleMiddleware("admin"),
     getAllDrivers
+);
+
+
+// Get driver user accounts - Admin only
+router.get(
+    "/users",
+    authMiddleware,
+    roleMiddleware("admin"),
+    getDriverUsers
 );
 
 // Get one driver - Admin only

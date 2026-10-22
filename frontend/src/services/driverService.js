@@ -1,6 +1,11 @@
 import api from './api';
 
 export const driverService = {
+    getDriverUsers: async () => {
+    const response = await api.get('/api/drivers/users');
+    return response.data;
+  },
+
   getAllDrivers: async () => {
     const response = await api.get('/api/drivers');
     return response.data;

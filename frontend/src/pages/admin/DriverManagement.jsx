@@ -18,6 +18,7 @@ import EmptyState from '../../components/common/EmptyState';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import driverService from '../../services/driverService';
 import busService from '../../services/busService';
+import authService from '../../services/authService';
 import { useToast } from '../../context/ToastContext';
 
 const DriverManagement = () => {
@@ -34,6 +35,10 @@ const DriverManagement = () => {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [driverToDelete, setDriverToDelete] = useState(null);
   const [formLoading, setFormLoading] = useState(false);
+  const [driverUsers, setDriverUsers] = useState([]);
+  const [showQuickCreate, setShowQuickCreate] = useState(false);
+  const [quickUser, setQuickUser] = useState({ name: '', email: '', password: '' });
+  const [quickLoading, setQuickLoading] = useState(false);
 
   const initialForm = {
     userId: '',
@@ -55,6 +60,23 @@ const DriverManagement = () => {
       ]);
       setDrivers(driversRes.drivers || []);
       setBuses(busesRes.buses || []);
+
+      try {
+        const usersRes = await driverService.getDriverUsers();
+        if (usersRes?.users) {
+          setDriverUsers(usersRes.users);
+        }
+      } catch {
+        const fallbackUsers = [];
+        const seen = new Set();
+        (driversRes.drivers || []).forEach((d) => {
+          if (d.userId && d.userId._id && !seen.has(d.userId._id)) {
+            seen.add(d.userId._id);
+            fallbackUsers.push(d.userId);
+          }
+        });
+        setDriverUsers(fallbackUsers);
+      }
     } catch (err) {
       console.error('Error fetching drivers:', err);
       addToast('Failed to load driver roster', 'error');
@@ -70,8 +92,52 @@ const DriverManagement = () => {
   const handleOpenAdd = () => {
     setIsEditing(false);
     setCurrentDriverId(null);
-    setFormData(initialForm);
+    setShowQuickCreate(false);
+    setQuickUser({ name: '', email: '', password: '' });
+    const firstAvailable = driverUsers.find((u) => !u.isAssigned);
+    setFormData({
+      ...initialForm,
+      userId: firstAvailable ? firstAvailable._id : (driverUsers[0]?._id || ''),
+    });
     setIsAddEditOpen(true);
+  };
+
+  const handleQuickCreateUser = async (e) => {
+    e.preventDefault();
+    if (!quickUser.name.trim() || !quickUser.email.trim() || !quickUser.password.trim()) {
+      addToast('Please fill in name, email, and password for the driver account', 'error');
+      return;
+    }
+    if (quickUser.password.length < 6) {
+      addToast('Password must be at least 6 characters', 'error');
+      return;
+    }
+    setQuickLoading(true);
+    try {
+      const res = await authService.register({
+        name: quickUser.name.trim(),
+        email: quickUser.email.trim().toLowerCase(),
+        password: quickUser.password,
+        role: 'driver',
+      });
+      const newUser = res.user;
+      const createdUser = {
+        _id: newUser.id || newUser._id,
+        name: newUser.name,
+        email: newUser.email,
+        isAssigned: false,
+      };
+      setDriverUsers((prev) => [createdUser, ...prev]);
+      setFormData((prev) => ({ ...prev, userId: createdUser._id }));
+      setShowQuickCreate(false);
+      setQuickUser({ name: '', email: '', password: '' });
+      addToast(`Driver account created for ${createdUser.name}! Selected automatically.`, 'success');
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to create driver account';
+      addToast(msg, 'error');
+    } finally {
+      setQuickLoading(false);
+    }
   };
 
   const handleOpenEdit = (driver) => {
@@ -323,20 +389,104 @@ const DriverManagement = () => {
               <div className="modal-body">
                 {!isEditing && (
                   <div className="form-group">
-                    <label className="form-label">
-                      Driver User Account ID <span className="req">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="e.g. 6ac9d108b57d7d406b4f8943"
-                      value={formData.userId}
-                      onChange={(e) => setFormData({ ...formData, userId: e.target.value })}
-                      required
-                    />
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      Note: The user must be registered in the system with role "driver".
-                    </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                      <label className="form-label" style={{ margin: 0 }}>
+                        Driver Account <span className="req">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowQuickCreate(!showQuickCreate)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--primary-navy)',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          padding: 0,
+                        }}
+                      >
+                        {showQuickCreate ? 'Cancel New Account' : '+ Create New Driver Account'}
+                      </button>
+                    </div>
+
+                    {showQuickCreate ? (
+                      <div
+                        style={{
+                          padding: '0.85rem',
+                          background: 'var(--bg-main, #F8FAFC)',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: 'var(--radius-md, 8px)',
+                          marginBottom: '0.5rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.6rem',
+                        }}
+                      >
+                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                          Quick Register New Driver User Account
+                        </span>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Driver Full Name (e.g. Ramesh Kumar)"
+                          value={quickUser.name}
+                          onChange={(e) => setQuickUser({ ...quickUser, name: e.target.value })}
+                        />
+                        <input
+                          type="email"
+                          className="form-control"
+                          placeholder="Driver Email (e.g. ramesh@example.com)"
+                          value={quickUser.email}
+                          onChange={(e) => setQuickUser({ ...quickUser, email: e.target.value })}
+                        />
+                        <input
+                          type="password"
+                          className="form-control"
+                          placeholder="Password (min 6 characters)"
+                          value={quickUser.password}
+                          onChange={(e) => setQuickUser({ ...quickUser, password: e.target.value })}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          style={{ padding: '0.45rem 0.85rem', fontSize: '0.825rem', alignSelf: 'flex-start' }}
+                          onClick={handleQuickCreateUser}
+                          disabled={quickLoading}
+                        >
+                          {quickLoading ? 'Creating Account...' : 'Save & Select Driver Account'}
+                        </button>
+                      </div>
+                    ) : driverUsers.length > 0 ? (
+                      <select
+                        className="form-control"
+                        value={formData.userId}
+                        onChange={(e) => setFormData({ ...formData, userId: e.target.value })}
+                        required
+                      >
+                        <option value="">Select linked driver</option>
+                        {driverUsers.map((u) => (
+                          <option key={u._id} value={u._id} disabled={u.isAssigned}>
+                            {u.name} ({u.email}){u.isAssigned ? ' — [Already Profiled]' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                        <select
+                          className="form-control"
+                          value={formData.userId}
+                          onChange={(e) => setFormData({ ...formData, userId: e.target.value })}
+                          required
+                        >
+                          <option value="">Select linked driver</option>
+                        </select>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--amber-700, #B45309)' }}>
+                          No driver user accounts found. Click "+ Create New Driver Account" above to add one instantly!
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
 
