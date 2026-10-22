@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 const notificationSchema = new mongoose.Schema(
@@ -19,7 +18,7 @@ const notificationSchema = new mongoose.Schema(
         },
         type: {
             type: String,
-            enum: ["BOARDING", "DROPOFF", "TRIP", "GENERAL"],
+            enum: ["BOARDING", "DROPOFF", "TRIP", "GENERAL", "DELAY"],
             default: "GENERAL"
         },
         isRead: {

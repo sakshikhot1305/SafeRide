@@ -1,10 +1,10 @@
-
 const express = require("express");
 const router = express.Router();
 
 const {
     updateLocation,
-    getBusLocation
+    getBusLocation,
+    getBusETA
 } = require("../controllers/busTrackingController");
 
 const authMiddleware = require("../middleware/authMiddleware");
@@ -16,6 +16,14 @@ router.post(
     authMiddleware,
     roleMiddleware("driver"),
     updateLocation
+);
+
+// Admin, parent, or driver checks AI arrival prediction and route delay
+router.get(
+    "/:busId/eta",
+    authMiddleware,
+    roleMiddleware("admin", "parent", "driver"),
+    getBusETA
 );
 
 // Admin or parent checks a bus's latest location

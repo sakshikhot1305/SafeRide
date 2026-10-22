@@ -1,0 +1,31 @@
+{
+  "model_type": "RandomForestRegressor",
+  "n_estimators": 100,
+  "max_depth": 12,
+  "train_samples": 2000,
+  "test_samples": 500,
+  "evaluation_metrics": {
+    "mean_absolute_error_minutes": 1.497,
+    "root_mean_squared_error_minutes": 2.01,
+    "r2_score": 0.9715,
+    "baseline_physics_mae_minutes": 7.228
+  },
+  "feature_importances": {
+    "distance_km": 0.6996,
+    "current_speed_kmh": 0.2713,
+    "time_of_day_minutes": 0.0069,
+    "day_of_week": 0.0021,
+    "stops_remaining": 0.0174,
+    "stop_index": 0.0027
+  },
+  "feature_columns": [
+    "distance_km",
+    "current_speed_kmh",
+    "time_of_day_minutes",
+    "day_of_week",
+    "stops_remaining",
+    "stop_index"
+  ],
+  "data_source": "SYNTHETIC_DEMO (clearly labelled development dataset)",
+  "traffic_data_note": "No live municipal traffic API integrated; peak hours modeled statistically."
+}

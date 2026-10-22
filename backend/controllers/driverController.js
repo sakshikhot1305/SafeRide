@@ -2,6 +2,7 @@
 const mongoose = require("mongoose");
 const Driver = require("../models/Driver");
 const User = require("../models/User");
+const Student = require("../models/Student");
 
 // CREATE DRIVER PROFILE
 const createDriver = async (req, res) => {
@@ -206,10 +207,64 @@ const deleteDriver = async (req, res) => {
 };
 
 
+// GET LOGGED-IN DRIVER PROFILE
+const getMyDriverProfile = async (req, res) => {
+    try {
+        const userId = req.user.id || req.user._id || req.user.userId;
+        const driver = await Driver.findOne({ userId })
+            .populate("userId", "name email role")
+            .populate("busId");
+
+        if (!driver) {
+            return res.status(404).json({
+                message: "Driver profile not found"
+            });
+        }
+
+        return res.status(200).json({ driver });
+    } catch (error) {
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
+// GET STUDENTS ON DRIVER'S ASSIGNED BUS
+const getMyBusStudents = async (req, res) => {
+    try {
+        const userId = req.user.id || req.user._id || req.user.userId;
+        const driver = await Driver.findOne({ userId });
+
+        if (!driver || !driver.busId) {
+            return res.status(404).json({
+                message: "Driver or assigned bus not found",
+                students: []
+            });
+        }
+
+        const students = await Student.find({ busId: driver.busId, status: "Active" })
+            .populate("routeId")
+            .populate("parentId", "name email");
+
+        return res.status(200).json({
+            count: students.length,
+            students
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     createDriver,
     getAllDrivers,
     getDriverById,
     updateDriver,
-    deleteDriver
+    deleteDriver,
+    getMyDriverProfile,
+    getMyBusStudents
 };

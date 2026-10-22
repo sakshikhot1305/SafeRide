@@ -1,73 +1,122 @@
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
 
-import './App.css';
+// Layouts
+import PublicLayout from './layouts/PublicLayout';
+import AdminLayout from './layouts/AdminLayout';
+import DriverLayout from './layouts/DriverLayout';
+import ParentLayout from './layouts/ParentLayout';
+import ProtectedRoute from './layouts/ProtectedRoute';
+
+// Public Pages
+import Home from './pages/public/Home';
+import About from './pages/public/About';
+import Services from './pages/public/Services';
+import Contact from './pages/public/Contact';
+
+// Auth Pages
+import Login from './pages/auth/Login';
+import Register from './pages/auth/Register';
+
+// Admin Pages
+import AdminDashboard from './pages/admin/AdminDashboard';
+import StudentManagement from './pages/admin/StudentManagement';
+import DriverManagement from './pages/admin/DriverManagement';
+import BusManagement from './pages/admin/BusManagement';
+import RouteManagement from './pages/admin/RouteManagement';
+import AttendanceManagement from './pages/admin/AttendanceManagement';
+import AnalyticsView from './pages/admin/AnalyticsView';
+
+// Driver Pages
+import DriverDashboard from './pages/driver/DriverDashboard';
+import QRAttendance from './pages/driver/QRAttendance';
+import BusTracking from './pages/driver/BusTracking';
+
+// Parent Pages
+import ParentDashboard from './pages/parent/ParentDashboard';
+import MyChild from './pages/parent/MyChild';
+import AttendanceHistory from './pages/parent/AttendanceHistory';
+import Notifications from './pages/parent/Notifications';
+import LiveTracking from './pages/parent/LiveTracking';
+
+// Not Found
+import NotFound from './pages/NotFound';
 
 function App() {
   return (
-    <div className="app">
-      <nav className="navbar">
-        <h2>🚌 SafeRide</h2>
-        <div className="nav-links">
-          <a href="#home">Home</a>
-          <a href="#features">Features</a>
-          <a href="#about">About</a>
-          <button className="login-btn">Login</button>
-        </div>
-      </nav>
+    <BrowserRouter>
+      <AuthProvider>
+        <ToastProvider>
+          <Routes>
+            {/* Public Pages */}
+            <Route path="/" element={<Home />} />
+            <Route path="/tracking" element={<Navigate to="/parent/tracking" replace />} />
+            <Route element={<PublicLayout />}>
+              <Route path="/about" element={<About />} />
+              <Route path="/services" element={<Services />} />
+              <Route path="/contact" element={<Contact />} />
+            </Route>
 
-      <section className="hero" id="home">
-        <div className="hero-text">
-          <p className="tag">SAFE • SMART • SECURE</p>
-          <h1>Every Student's Journey, <span>Our Responsibility.</span></h1>
-          <p>
-            A smart school bus safety management system
-            that helps schools and parents keep students safe.
-          </p>
-          <button className="primary-btn">Explore SafeRide →</button>
-        </div>
+            {/* Auth Pages */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
 
-        <div className="bus-card">
-          <div className="bus-icon">🚌</div>
-          <h3>School Bus Safety</h3>
-          <p>Safe journeys start here.</p>
-          <div className="status">
-            <span></span> Safety comes first
-          </div>
-        </div>
-      </section>
+            {/* Admin Dashboard Protected Routes */}
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<AdminDashboard />} />
+              <Route path="students" element={<StudentManagement />} />
+              <Route path="drivers" element={<DriverManagement />} />
+              <Route path="buses" element={<BusManagement />} />
+              <Route path="routes" element={<RouteManagement />} />
+              <Route path="attendance" element={<AttendanceManagement />} />
+              <Route path="analytics" element={<AnalyticsView />} />
+            </Route>
 
-      <section className="features" id="features">
-        <h2>Everything for a Safer Journey</h2>
-        <p className="section-subtitle">
-          Simple tools to support schools, drivers and parents.
-        </p>
+            {/* Driver Dashboard Protected Routes */}
+            <Route
+              path="/driver"
+              element={
+                <ProtectedRoute allowedRoles={['driver']}>
+                  <DriverLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<DriverDashboard />} />
+              <Route path="qr-attendance" element={<QRAttendance />} />
+              <Route path="tracking" element={<BusTracking />} />
+            </Route>
 
-        <div className="feature-grid">
-          <div className="feature-card">
-            <div className="feature-icon">📍</div>
-            <h3>Bus Tracking</h3>
-            <p>Help monitor school bus journeys and routes.</p>
-          </div>
+            {/* Parent Dashboard Protected Routes */}
+            <Route
+              path="/parent"
+              element={
+                <ProtectedRoute allowedRoles={['parent']}>
+                  <ParentLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<ParentDashboard />} />
+              <Route path="child" element={<MyChild />} />
+              <Route path="attendance" element={<AttendanceHistory />} />
+              <Route path="notifications" element={<Notifications />} />
+              <Route path="tracking" element={<LiveTracking />} />
+            </Route>
 
-          <div className="feature-card">
-            <div className="feature-icon">👨‍🎓</div>
-            <h3>Student Safety</h3>
-            <p>Keep student transport information organized.</p>
-          </div>
-
-          <div className="feature-card">
-            <div className="feature-icon">🔔</div>
-            <h3>Safety Alerts</h3>
-            <p>Provide a place for important journey updates.</p>
-          </div>
-        </div>
-      </section>
-
-      <footer id="about">
-        <h3>SafeRide</h3>
-        <p>Making school transportation safer and smarter.</p>
-        <small>© 2026 SafeRide. School Bus Safety Management System.</small>
-      </footer>
-    </div>
+            {/* Fallback 404 Route */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </ToastProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
 

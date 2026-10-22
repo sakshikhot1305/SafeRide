@@ -6,13 +6,22 @@ const {
     getAllStudents,
     getStudentById,
     updateStudent,
-    deleteStudent
+    deleteStudent,
+    getMyChildren
 } = require("../controllers/studentController");
 
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
 
 const router = express.Router();
+
+// Get logged-in parent's children
+router.get(
+    "/my-children",
+    authMiddleware,
+    roleMiddleware("parent"),
+    getMyChildren
+);
 
 // Create student - Admin only
 router.post(

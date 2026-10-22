@@ -338,11 +338,32 @@ const deleteStudent = async (req, res) => {
 };
 
 
+// GET CHILDREN FOR LOGGED IN PARENT
+const getMyChildren = async (req, res) => {
+    try {
+        const parentId = req.user.id || req.user._id || req.user.userId;
+        const students = await Student.find({ parentId })
+            .populate("busId")
+            .populate("routeId");
+
+        return res.status(200).json({
+            count: students.length,
+            students
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
 // EXPORT FUNCTIONS
 module.exports = {
     createStudent,
     getAllStudents,
     getStudentById,
     updateStudent,
-    deleteStudent
+    deleteStudent,
+    getMyChildren
 };

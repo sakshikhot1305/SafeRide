@@ -1,1 +1,39 @@
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+
+# Local Password Reset Scripts
+backend/resetDriverPassword.js
 backend/resetParentPassword.js
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Python Cache & Artifacts
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Build Outputs
+dist/
+build/
+frontend/dist/
+
+# OS and Editor Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*

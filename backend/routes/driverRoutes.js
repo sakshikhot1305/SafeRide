@@ -6,13 +6,31 @@ const {
     getAllDrivers,
     getDriverById,
     updateDriver,
-    deleteDriver
+    deleteDriver,
+    getMyDriverProfile,
+    getMyBusStudents
 } = require("../controllers/driverController");
 
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
 
 const router = express.Router();
+
+// Get logged-in driver profile
+router.get(
+    "/me",
+    authMiddleware,
+    roleMiddleware("driver"),
+    getMyDriverProfile
+);
+
+// Get students on driver's assigned bus
+router.get(
+    "/my-bus/students",
+    authMiddleware,
+    roleMiddleware("driver"),
+    getMyBusStudents
+);
 
 // Create driver - Admin only
 router.post(

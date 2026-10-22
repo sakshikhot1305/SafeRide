@@ -35,6 +35,11 @@ const routeSchema = new mongoose.Schema(
                 longitude: {
                     type: Number,
                     required: true
+                },
+
+                scheduledTime: {
+                    type: String,
+                    default: null
                 }
             }
         ],
