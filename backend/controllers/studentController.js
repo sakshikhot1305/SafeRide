@@ -27,8 +27,7 @@ const createStudent = async (req, res) => {
             !dateOfBirth ||
             !gender ||
             !className ||
-            !division ||
-            !parentId
+            !division
         ) {
             return res.status(400).json({
                 message: "Required fields are missing"
@@ -44,23 +43,24 @@ const createStudent = async (req, res) => {
             });
         }
 
-        // Validate parent ID
-        if (!mongoose.Types.ObjectId.isValid(parentId)) {
-            return res.status(400).json({
-                message: "Invalid parent ID"
-            });
-        }
+        // Validate parent ID if provided
+        if (parentId) {
+            if (!mongoose.Types.ObjectId.isValid(parentId)) {
+                return res.status(400).json({
+                    message: "Invalid parent ID"
+                });
+            }
 
-        // Check whether parent exists
-        const parent = await User.findOne({
-            _id: parentId,
-            role: "parent"
-        });
-
-        if (!parent) {
-            return res.status(400).json({
-                message: "Parent account not found"
+            const parent = await User.findOne({
+                _id: parentId,
+                role: "parent"
             });
+
+            if (!parent) {
+                return res.status(400).json({
+                    message: "Parent account not found"
+                });
+            }
         }
 
         // Validate bus
@@ -105,7 +105,7 @@ const createStudent = async (req, res) => {
             gender,
             className,
             division,
-            parentId,
+            parentId: parentId || null,
             busId: busId || null,
             routeId: routeId || null,
             qrCode: studentId
@@ -205,21 +205,25 @@ const updateStudent = async (req, res) => {
 
         // Validate parent if being updated
         if (req.body.parentId !== undefined) {
-            if (!mongoose.Types.ObjectId.isValid(req.body.parentId)) {
-                return res.status(400).json({
-                    message: "Invalid parent ID"
-                });
-            }
+            if (req.body.parentId === null || req.body.parentId === "") {
+                // Allowed: unlinking parent
+            } else {
+                if (!mongoose.Types.ObjectId.isValid(req.body.parentId)) {
+                    return res.status(400).json({
+                        message: "Invalid parent ID"
+                    });
+                }
 
-            const parent = await User.findOne({
-                _id: req.body.parentId,
-                role: "parent"
-            });
-
-            if (!parent) {
-                return res.status(400).json({
-                    message: "Parent account not found"
+                const parent = await User.findOne({
+                    _id: req.body.parentId,
+                    role: "parent"
                 });
+
+                if (!parent) {
+                    return res.status(400).json({
+                        message: "Parent account not found"
+                    });
+                }
             }
         }
 
@@ -280,7 +284,11 @@ const updateStudent = async (req, res) => {
 
         allowedFields.forEach((field) => {
             if (req.body[field] !== undefined) {
-                student[field] = req.body[field];
+                if (field === 'parentId' && (req.body[field] === '' || req.body[field] === null)) {
+                    student.parentId = null;
+                } else {
+                    student[field] = req.body[field];
+                }
             }
         });
 
@@ -358,8 +366,26 @@ const getMyChildren = async (req, res) => {
     }
 };
 
+
+// GET ALL PARENTS - Admin only
+const getAllParents = async (req, res) => {
+    try {
+        const parents = await User.find({ role: "parent" }).select("_id name email");
+        return res.status(200).json({
+            count: parents.length,
+            parents
+        });
+    } catch (error) {
+        return res.status(500).json({
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
 // EXPORT FUNCTIONS
 module.exports = {
+    getAllParents,
     createStudent,
     getAllStudents,
     getStudentById,

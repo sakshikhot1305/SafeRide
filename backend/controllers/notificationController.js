@@ -1,10 +1,14 @@
 
+const mongoose = require("mongoose");
 const Notification = require("../models/Notification");
 
 // Get notifications for the logged-in parent
 const getParentNotifications = async (req, res) => {
     try {
-        const parentId = req.user.id || req.user._id || req.user.userId;
+        const rawParentId = req.user.id || req.user._id || req.user.userId;
+        const parentId = mongoose.Types.ObjectId.isValid(rawParentId)
+            ? new mongoose.Types.ObjectId(rawParentId)
+            : rawParentId;
         console.log("Decoded user:", req.user);
         console.log("Parent ID used:", parentId);
         const notifications = await Notification.find({ parentId })
@@ -26,7 +30,10 @@ const getParentNotifications = async (req, res) => {
 // Mark a notification as read
 const markNotificationRead = async (req, res) => {
     try {
-        const parentId = req.user.id || req.user._id || req.user.userId;
+        const rawParentId = req.user.id || req.user._id || req.user.userId;
+        const parentId = mongoose.Types.ObjectId.isValid(rawParentId)
+            ? new mongoose.Types.ObjectId(rawParentId)
+            : rawParentId;
 
         const notification = await Notification.findOneAndUpdate(
             { _id: req.params.id, parentId },

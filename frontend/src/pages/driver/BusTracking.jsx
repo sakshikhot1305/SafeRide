@@ -15,6 +15,7 @@ import { Link } from 'react-router-dom';
 import DashboardHeader from '../../components/layout/DashboardHeader';
 import LeafletMap from '../../components/maps/LeafletMap';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import ErrorBoundary from '../../components/common/ErrorBoundary';
 import driverService from '../../services/driverService';
 import trackingService from '../../services/trackingService';
 import { useToast } from '../../context/ToastContext';
@@ -31,6 +32,7 @@ const BusTracking = () => {
 
   const watchIdRef = useRef(null);
   const lastSentTimeRef = useRef(0);
+  const isTripStartRef = useRef(true);
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -68,11 +70,14 @@ const BusTracking = () => {
 
   const sendLocationToServer = async (lat, lng, spd) => {
     try {
+      const isStart = isTripStartRef.current;
       await trackingService.updateLocation({
         latitude: lat,
         longitude: lng,
         speed: spd || 0,
+        isTripStart: isStart,
       });
+      isTripStartRef.current = false;
       setLastServerUpdate(new Date());
       setUpdateCount((c) => c + 1);
       setErrorMsg('');
@@ -97,7 +102,9 @@ const BusTracking = () => {
 
     setErrorMsg('');
     setIsSharing(true);
-    addToast('Starting GPS broadcast...', 'info');
+    isTripStartRef.current = true;
+    lastSentTimeRef.current = 0;
+    addToast('Starting GPS broadcast & notifying parents...', 'info');
 
     const options = {
       enableHighAccuracy: true,
@@ -337,14 +344,17 @@ const BusTracking = () => {
             )}
           </div>
 
-          <LeafletMap
-            latitude={currentCoords?.latitude}
-            longitude={currentCoords?.longitude}
-            speed={currentCoords?.speed}
-            lastUpdated={lastServerUpdate}
-            busNumber={bus?.busNumber || 'School Bus'}
-            height="380px"
-          />
+          <ErrorBoundary title="Driver Map Position" message="Reloading GPS coordinates...">
+            <LeafletMap
+              latitude={currentCoords?.latitude}
+              longitude={currentCoords?.longitude}
+              speed={currentCoords?.speed}
+              lastUpdated={lastServerUpdate}
+              busNumber={bus?.busNumber || 'School Bus'}
+              registrationNumber={bus?.registrationNumber || ''}
+              height="380px"
+            />
+          </ErrorBoundary>
         </div>
 
         {/* Operating Advice */}

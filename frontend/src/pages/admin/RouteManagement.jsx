@@ -15,6 +15,7 @@ import DashboardHeader from '../../components/layout/DashboardHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import ConfirmModal from '../../components/common/ConfirmModal';
+import ErrorBoundary from '../../components/common/ErrorBoundary';
 import LeafletMap from '../../components/maps/LeafletMap';
 import routeService from '../../services/routeService';
 import { useToast } from '../../context/ToastContext';
@@ -311,13 +312,15 @@ const RouteManagement = () => {
 
               {selectedRoute && (
                 <>
-                  <LeafletMap
-                    height="340px"
-                    busNumber={selectedRoute.routeName}
-                    routeStops={selectedRoute.stops || []}
-                    latitude={selectedRoute.stops?.[0]?.latitude}
-                    longitude={selectedRoute.stops?.[0]?.longitude}
-                  />
+                  <ErrorBoundary title="Route Map Waypoints" message="Reloading route coordinates...">
+                    <LeafletMap
+                      height="340px"
+                      busNumber={selectedRoute.routeName}
+                      routeStops={selectedRoute.stops || []}
+                      latitude={selectedRoute.stops?.[0]?.latitude}
+                      longitude={selectedRoute.stops?.[0]?.longitude}
+                    />
+                  </ErrorBoundary>
 
                   {/* Stops Timeline List */}
                   <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>

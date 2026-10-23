@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { Clock, Navigation, AlertCircle, MapPin, Gauge } from 'lucide-react';
+import { Clock, Navigation, AlertCircle, MapPin, Gauge, Radio, Crosshair } from 'lucide-react';
 
 // Fix for default Leaflet marker icons in React Vite bundlers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -11,36 +11,64 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-// Custom Bus Marker Icon
-const createBusIcon = (isStale = false) => {
+// Custom Animated Bus Marker Icon
+const createBusIcon = (statusMode = 'live') => {
+  const bgColor = statusMode === 'live' ? '#2678C8' : statusMode === 'waiting' ? '#D97706' : '#64748B';
+  const pulseRing =
+    statusMode === 'live'
+      ? `
+    <span style="
+      position: absolute;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(38, 120, 200, 0.35);
+      animation: busPulse 1.8s infinite ease-out;
+      pointer-events: none;
+    "></span>
+  `
+      : '';
+
   return L.divIcon({
     className: 'custom-bus-marker',
     html: `
       <div style="
-        background: ${isStale ? '#94A3B8' : '#2678C8'};
-        color: white;
-        width: 38px;
-        height: 38px;
-        border-radius: 50%;
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
-        border: 3px solid white;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        width: 48px;
+        height: 48px;
         transform: translate(-50%, -50%);
       ">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M8 6v6"/>
-          <path d="M15 6v6"/>
-          <path d="M2 12h19.6"/>
-          <path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-4.2C20 7.7 19.1 7 18 7H6c-1.1 0-2 .7-2.4 1.6L2.2 12.8c-.1.4-.2.8-.2 1.2 0 .4.1.8.2 1.2.3 1.1.8 2.8.8 2.8h3"/>
-          <circle cx="7" cy="18" r="2"/>
-          <path d="M9 18h5"/>
-          <circle cx="16" cy="18" r="2"/>
-        </svg>
+        ${pulseRing}
+        <div style="
+          background: ${bgColor};
+          color: white;
+          width: 38px;
+          height: 38px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 3px solid white;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+          z-index: 2;
+          transition: transform 0.2s ease;
+        ">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 6v6"/>
+            <path d="M15 6v6"/>
+            <path d="M2 12h19.6"/>
+            <path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-4.2C20 7.7 19.1 7 18 7H6c-1.1 0-2 .7-2.4 1.6L2.2 12.8c-.1.4-.2.8-.2 1.2 0 .4.1.8.2 1.2.3 1.1.8 2.8.8 2.8h3"/>
+            <circle cx="7" cy="18" r="2"/>
+            <path d="M9 18h5"/>
+            <circle cx="16" cy="18" r="2"/>
+          </svg>
+        </div>
       </div>
     `,
-    iconSize: [38, 38],
+    iconSize: [48, 48],
     iconAnchor: [0, 0],
   });
 };
@@ -101,14 +129,88 @@ const createNextStopIcon = (index) => {
   });
 };
 
-// Component to dynamically re-center map when coordinates change
-const MapRecenter = ({ center }) => {
+// Hook: Smooth position interpolation for realistic moving marker
+const useSmoothPosition = (targetLat, targetLng, duration = 1200) => {
+  const isValidTarget =
+    Number.isFinite(targetLat) &&
+    Number.isFinite(targetLng) &&
+    targetLat >= -90 &&
+    targetLat <= 90 &&
+    targetLng >= -180 &&
+    targetLng <= 180;
+
+  const [currentPos, setCurrentPos] = useState(() => (isValidTarget ? [targetLat, targetLng] : [null, null]));
+  const prevPosRef = useRef(isValidTarget ? [targetLat, targetLng] : [null, null]);
+  const animRef = useRef(null);
+
+  useEffect(() => {
+    if (!isValidTarget) return;
+
+    const startLat = prevPosRef.current ? prevPosRef.current[0] : null;
+    const startLng = prevPosRef.current ? prevPosRef.current[1] : null;
+
+    if (!Number.isFinite(startLat) || !Number.isFinite(startLng)) {
+      prevPosRef.current = [targetLat, targetLng];
+      setCurrentPos([targetLat, targetLng]);
+      return;
+    }
+
+    if (startLat === targetLat && startLng === targetLng) return;
+
+    const startTime = performance.now();
+    const animate = (now) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // Smooth easeInOutQuad curve
+      const ease = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+      const curLat = startLat + (targetLat - startLat) * ease;
+      const curLng = startLng + (targetLng - startLng) * ease;
+      setCurrentPos([curLat, curLng]);
+
+      if (progress < 1) {
+        animRef.current = requestAnimationFrame(animate);
+      } else {
+        prevPosRef.current = [targetLat, targetLng];
+      }
+    };
+
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+    animRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+    };
+  }, [targetLat, targetLng, isValidTarget, duration]);
+
+  // CRITICAL: If target is valid, NEVER return null or NaN to prevent Leaflet LatLng crash
+  if (
+    isValidTarget &&
+    (!currentPos || !Number.isFinite(currentPos[0]) || !Number.isFinite(currentPos[1]))
+  ) {
+    return [targetLat, targetLng];
+  }
+
+  return currentPos;
+};
+
+// Component to dynamically re-center/pan map when coordinates change if followBus is active
+const MapFollowController = ({ center, followBus }) => {
   const map = useMap();
   useEffect(() => {
-    if (center && center[0] && center[1]) {
-      map.setView(center, map.getZoom(), { animate: true });
+    if (
+      followBus &&
+      Array.isArray(center) &&
+      center.length >= 2 &&
+      Number.isFinite(center[0]) &&
+      Number.isFinite(center[1])
+    ) {
+      try {
+        map.panTo(center, { animate: true, duration: 1.0 });
+      } catch (err) {
+        console.warn('Map pan error:', err);
+      }
     }
-  }, [center, map]);
+  }, [center, followBus, map]);
   return null;
 };
 
@@ -118,45 +220,123 @@ const LeafletMap = ({
   speed = 0,
   lastUpdated,
   busNumber = 'School Bus',
+  registrationNumber = '',
   routeStops = [],
   nextStop = null,
   predictedEtaMinutes = null,
-  height = '420px',
+  height = '440px',
 }) => {
-  const isValidCoord =
-    Number.isFinite(Number(latitude)) &&
-    Number.isFinite(Number(longitude)) &&
-    latitude >= -90 &&
-    latitude <= 90 &&
-    longitude >= -180 &&
-    longitude <= 180;
+  const [followBus, setFollowBus] = useState(true);
 
-  // Determine if location is stale (> 3 minutes without update)
-  const isStale = useMemo(() => {
-    if (!lastUpdated) return true;
+  const numLat = Number(latitude);
+  const numLng = Number(longitude);
+  const isValidCoord =
+    Number.isFinite(numLat) &&
+    Number.isFinite(numLng) &&
+    numLat >= -90 &&
+    numLat <= 90 &&
+    numLng >= -180 &&
+    numLng <= 180;
+
+  // Smooth position interpolation
+  const smoothPos = useSmoothPosition(isValidCoord ? numLat : NaN, isValidCoord ? numLng : NaN, 1200);
+
+  const smoothLat = smoothPos ? smoothPos[0] : null;
+  const smoothLng = smoothPos ? smoothPos[1] : null;
+
+  const isValidSmooth =
+    Number.isFinite(smoothLat) &&
+    Number.isFinite(smoothLng) &&
+    smoothLat >= -90 &&
+    smoothLat <= 90 &&
+    smoothLng >= -180 &&
+    smoothLng <= 180;
+
+  const activeMarkerPos = isValidSmooth
+    ? [smoothLat, smoothLng]
+    : isValidCoord
+    ? [numLat, numLng]
+    : null;
+
+  // Status calculation based on last update timestamp freshness
+  const statusInfo = useMemo(() => {
+    if (!isValidCoord) {
+      return {
+        label: 'No Signal',
+        mode: 'nosignal',
+        color: 'var(--error, #EF4444)',
+        desc: 'Waiting for bus GPS broadcast to begin',
+      };
+    }
+    if (!lastUpdated) {
+      return {
+        label: 'Live',
+        mode: 'live',
+        color: 'var(--success, #16A34A)',
+        desc: 'GPS position active',
+      };
+    }
     const diffMs = Date.now() - new Date(lastUpdated).getTime();
-    return diffMs > 3 * 60 * 1000;
-  }, [lastUpdated]);
+    if (diffMs < 60 * 1000) {
+      return {
+        label: 'Live',
+        mode: 'live',
+        color: 'var(--success, #16A34A)',
+        desc: 'Real-time GPS broadcast active',
+      };
+    }
+    if (diffMs <= 3 * 60 * 1000) {
+      const mins = Math.floor(diffMs / 60000);
+      return {
+        label: 'Waiting for Location',
+        mode: 'waiting',
+        color: 'var(--warning, #F59E0B)',
+        desc: `Signal delayed (${mins}m ago)`,
+      };
+    }
+    return {
+      label: 'Offline',
+      mode: 'offline',
+      color: '#64748B',
+      desc: 'GPS signal stopped or driver offline',
+    };
+  }, [isValidCoord, lastUpdated]);
 
   const center = useMemo(() => {
-    if (isValidCoord) return [Number(latitude), Number(longitude)];
-    if (routeStops.length > 0 && routeStops[0].latitude && routeStops[0].longitude) {
-      return [Number(routeStops[0].latitude), Number(routeStops[0].longitude)];
+    if (activeMarkerPos && Number.isFinite(activeMarkerPos[0]) && Number.isFinite(activeMarkerPos[1])) {
+      return activeMarkerPos;
     }
-    // Default fallback center (Kolhapur coordinates matching database data)
-    return [16.705, 74.243];
-  }, [isValidCoord, latitude, longitude, routeStops]);
+    if (Array.isArray(routeStops) && routeStops.length > 0) {
+      const firstStop = routeStops.find(
+        (s) => Number.isFinite(Number(s.latitude)) && Number.isFinite(Number(s.longitude))
+      );
+      if (firstStop) {
+        return [Number(firstStop.latitude), Number(firstStop.longitude)];
+      }
+    }
+    return [16.705, 74.243]; // Kolhapur default
+  }, [activeMarkerPos, routeStops]);
 
-  // Polyline coordinates from stops
   const polylineCoords = useMemo(() => {
+    if (!Array.isArray(routeStops)) return [];
     return routeStops
       .filter((s) => Number.isFinite(Number(s.latitude)) && Number.isFinite(Number(s.longitude)))
       .map((s) => [Number(s.latitude), Number(s.longitude)]);
   }, [routeStops]);
 
   return (
-    <div style={{ position: 'relative', width: '100%', height, borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
-      {/* Top Status Banner */}
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        height,
+        borderRadius: 'var(--radius-lg, 12px)',
+        overflow: 'hidden',
+        border: '1px solid var(--border-color, #E2E8F0)',
+        boxShadow: 'var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.08))',
+      }}
+    >
+      {/* Top Status Header */}
       <div
         style={{
           position: 'absolute',
@@ -169,49 +349,78 @@ const LeafletMap = ({
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: '0.5rem',
-          padding: '0.6rem 1rem',
-          borderRadius: 'var(--radius-md)',
-          background: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(4px)',
-          border: '1px solid var(--border-color)',
-          boxShadow: 'var(--shadow-md)',
+          padding: '0.65rem 1rem',
+          borderRadius: 'var(--radius-md, 8px)',
+          background: 'rgba(255, 255, 255, 0.96)',
+          backdropFilter: 'blur(8px)',
+          border: '1px solid var(--border-color, #E2E8F0)',
+          boxShadow: 'var(--shadow-md, 0 4px 6px -1px rgba(0,0,0,0.1))',
           fontSize: '0.85rem',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <div
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <span
             style={{
               width: '10px',
               height: '10px',
               borderRadius: '50%',
-              backgroundColor: isValidCoord && !isStale ? 'var(--success)' : isStale ? 'var(--warning)' : 'var(--error)',
+              backgroundColor: statusInfo.color,
+              display: 'inline-block',
+              boxShadow: statusInfo.mode === 'live' ? '0 0 8px rgba(16, 185, 129, 0.8)' : 'none',
             }}
           />
-          <span style={{ fontWeight: 700, color: 'var(--primary-navy)' }}>{busNumber}</span>
-          <span style={{ color: 'var(--text-secondary)' }}>•</span>
-          <span style={{ color: isValidCoord && !isStale ? 'var(--success)' : isStale ? 'var(--warning)' : 'var(--error)', fontWeight: 600 }}>
-            {isValidCoord && !isStale ? 'Live Connected' : isStale ? 'Stale / Offline' : 'No Signal'}
+          <span style={{ fontWeight: 800, color: 'var(--primary-navy, #12345A)' }}>
+            {busNumber} {registrationNumber ? `(${registrationNumber})` : ''}
+          </span>
+          <span style={{ color: 'var(--text-secondary, #64748B)' }}>•</span>
+          <span style={{ color: statusInfo.color, fontWeight: 700 }}>{statusInfo.label}</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted, #94A3B8)' }}>
+            ({statusInfo.desc})
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--text-secondary)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', color: 'var(--text-secondary, #64748B)' }}>
           {speed !== undefined && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: 600 }}>
               <Gauge size={14} /> {speed} km/h
             </span>
           )}
           {lastUpdated && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-              <Clock size={14} /> {new Date(lastUpdated).toLocaleTimeString()}
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem' }}>
+              <Clock size={13} /> {new Date(lastUpdated).toLocaleTimeString()}
             </span>
+          )}
+          {activeMarkerPos && (
+            <button
+              type="button"
+              onClick={() => setFollowBus((f) => !f)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.3rem',
+                padding: '0.25rem 0.55rem',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                borderRadius: 'var(--radius-sm, 6px)',
+                border: '1px solid',
+                borderColor: followBus ? 'var(--secondary-blue, #2678C8)' : 'var(--border-color, #E2E8F0)',
+                background: followBus ? 'rgba(38, 120, 200, 0.1)' : '#FFFFFF',
+                color: followBus ? 'var(--secondary-blue, #2678C8)' : 'var(--text-secondary, #64748B)',
+                cursor: 'pointer',
+              }}
+              title={followBus ? 'Click to stop auto-following' : 'Click to follow moving bus'}
+            >
+              <Crosshair size={12} />
+              {followBus ? 'Following Bus' : 'Follow Bus'}
+            </button>
           )}
         </div>
       </div>
 
-      {/* Main Map */}
+      {/* Leaflet Map Canvas */}
       <MapContainer
         center={center}
-        zoom={isValidCoord ? 14 : 12}
+        zoom={activeMarkerPos ? 14 : 12}
         style={{ width: '100%', height: '100%', zIndex: 1 }}
         scrollWheelZoom={false}
       >
@@ -220,25 +429,28 @@ const LeafletMap = ({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        <MapRecenter center={center} />
+        <MapFollowController center={activeMarkerPos || center} followBus={followBus} />
 
-        {/* Bus Marker */}
-        {isValidCoord && (
-          <Marker position={[Number(latitude), Number(longitude)]} icon={createBusIcon(isStale)}>
+        {/* Smooth Moving Bus Marker */}
+        {activeMarkerPos && (
+          <Marker position={activeMarkerPos} icon={createBusIcon(statusInfo.mode)}>
             <Popup>
-              <div style={{ padding: '0.25rem', minWidth: '160px' }}>
-                <p style={{ fontWeight: 700, color: 'var(--primary-navy)', fontSize: '0.95rem', marginBottom: '0.25rem' }}>
-                  {busNumber}
+              <div style={{ padding: '0.35rem', minWidth: '170px' }}>
+                <p style={{ fontWeight: 800, color: 'var(--primary-navy, #12345A)', fontSize: '0.95rem', marginBottom: '0.25rem' }}>
+                  {busNumber} {registrationNumber && `(${registrationNumber})`}
                 </p>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.15rem 0' }}>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary, #64748B)', margin: '0.2rem 0' }}>
                   Speed: <strong>{speed} km/h</strong>
                 </p>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Updated: {lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : 'N/A'}
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted, #94A3B8)' }}>
+                  Status: <strong style={{ color: statusInfo.color }}>{statusInfo.label}</strong>
                 </p>
-                {isStale && (
-                  <p style={{ fontSize: '0.75rem', color: 'var(--warning)', fontWeight: 600, marginTop: '0.25rem' }}>
-                    Note: Last recorded GPS position. Driver may be offline or between stops.
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted, #94A3B8)' }}>
+                  Last GPS Signal: {lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : 'N/A'}
+                </p>
+                {statusInfo.mode === 'offline' && (
+                  <p style={{ fontSize: '0.75rem', color: 'var(--warning, #F59E0B)', fontWeight: 600, marginTop: '0.35rem' }}>
+                    Warning: GPS updates have paused. Displaying last verified coordinates.
                   </p>
                 )}
               </div>
@@ -247,52 +459,60 @@ const LeafletMap = ({
         )}
 
         {/* Route Stops */}
-        {routeStops.map((stop, idx) => {
-          if (!stop.latitude || !stop.longitude) return null;
-          const isNextStop = nextStop && (
-            (nextStop._id && stop._id && nextStop._id.toString() === stop._id.toString()) ||
-            (nextStop.name && stop.name && nextStop.name.trim().toLowerCase() === stop.name.trim().toLowerCase())
-          );
-          return (
-            <Marker
-              key={idx}
-              position={[Number(stop.latitude), Number(stop.longitude)]}
-              icon={isNextStop ? createNextStopIcon(idx) : createStopIcon(idx)}
-            >
-              <Popup>
-                <div style={{ padding: '0.2rem', minWidth: '160px' }}>
-                  <p style={{ fontWeight: 600, color: 'var(--primary-navy)', fontSize: '0.85rem' }}>
-                    Stop {idx + 1}: {stop.name} {isNextStop && '(Next Target Stop)'}
-                  </p>
-                  {isNextStop && predictedEtaMinutes !== null && predictedEtaMinutes !== undefined && (
-                    <p style={{ fontSize: '0.8rem', color: '#0284C7', fontWeight: 700, margin: '0.15rem 0' }}>
-                      Predicted ETA: ~{predictedEtaMinutes} min
-                    </p>
-                  )}
-                  {stop.scheduledTime && (
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0.1rem 0' }}>
-                      Scheduled: <strong>{stop.scheduledTime}</strong>
-                    </p>
-                  )}
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                    {stop.latitude}, {stop.longitude}
-                  </p>
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
+        {Array.isArray(routeStops) &&
+          routeStops.map((stop, idx) => {
+            const sLat = Number(stop.latitude);
+            const sLng = Number(stop.longitude);
+            if (!Number.isFinite(sLat) || !Number.isFinite(sLng)) return null;
 
-        {/* Route Line */}
+            const isNextStop = Boolean(
+              nextStop &&
+                ((nextStop._id && stop._id && nextStop._id.toString() === stop._id.toString()) ||
+                  (typeof nextStop.name === 'string' &&
+                    typeof stop.name === 'string' &&
+                    nextStop.name.trim().toLowerCase() === stop.name.trim().toLowerCase()))
+            );
+
+            return (
+              <Marker
+                key={stop._id || idx}
+                position={[sLat, sLng]}
+                icon={isNextStop ? createNextStopIcon(idx) : createStopIcon(idx)}
+              >
+                <Popup>
+                  <div style={{ padding: '0.25rem', minWidth: '160px' }}>
+                    <p style={{ fontWeight: 700, color: 'var(--primary-navy, #12345A)', fontSize: '0.85rem' }}>
+                      Stop {idx + 1}: {stop.name || 'Bus Stop'} {isNextStop && '(Next Target Stop)'}
+                    </p>
+                    {isNextStop && predictedEtaMinutes !== null && predictedEtaMinutes !== undefined && (
+                      <p style={{ fontSize: '0.8rem', color: '#0284C7', fontWeight: 800, margin: '0.2rem 0' }}>
+                        Predicted ETA: ~{predictedEtaMinutes} min
+                      </p>
+                    )}
+                    {stop.scheduledTime && (
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary, #64748B)', margin: '0.1rem 0' }}>
+                        Scheduled: <strong>{stop.scheduledTime}</strong>
+                      </p>
+                    )}
+                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted, #94A3B8)' }}>
+                      Coords: {sLat.toFixed(4)}, {sLng.toFixed(4)}
+                    </p>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
+
+        {/* Route Polyline */}
         {polylineCoords.length > 1 && (
           <Polyline
             positions={polylineCoords}
-            pathOptions={{ color: 'var(--secondary-blue)', weight: 4, dashArray: '6, 8', opacity: 0.8 }}
+            pathOptions={{ color: 'var(--secondary-blue, #2678C8)', weight: 4, dashArray: '6, 8', opacity: 0.8 }}
           />
         )}
       </MapContainer>
 
-      {!isValidCoord && (
+      {!activeMarkerPos && (
         <div
           style={{
             position: 'absolute',
@@ -302,18 +522,18 @@ const LeafletMap = ({
             zIndex: 400,
             background: 'rgba(255, 255, 255, 0.95)',
             padding: '0.6rem 1.25rem',
-            borderRadius: 'var(--radius-full)',
-            boxShadow: 'var(--shadow-md)',
+            borderRadius: 'var(--radius-full, 9999px)',
+            boxShadow: 'var(--shadow-md, 0 4px 6px -1px rgba(0,0,0,0.1))',
             display: 'flex',
             alignItems: 'center',
             gap: '0.5rem',
-            color: 'var(--text-secondary)',
+            color: 'var(--text-secondary, #64748B)',
             fontSize: '0.85rem',
-            border: '1px solid var(--border-color)',
+            border: '1px solid var(--border-color, #E2E8F0)',
           }}
         >
-          <AlertCircle size={16} color="var(--warning)" />
-          <span>Live GPS coordinates currently unavailable for this bus.</span>
+          <AlertCircle size={16} color="var(--warning, #F59E0B)" />
+          <span>Live GPS broadcast from driver currently awaiting signal.</span>
         </div>
       )}
     </div>

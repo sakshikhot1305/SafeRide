@@ -247,6 +247,10 @@ const ParentDashboard = () => {
                           ? 'var(--secondary-blue)'
                           : notif.type === 'DROPOFF'
                           ? 'var(--success)'
+                          : notif.type === 'TRIP'
+                          ? '#0284C7'
+                          : notif.type === 'DELAY'
+                          ? 'var(--error)'
                           : 'var(--warning)'
                       }`,
                       display: 'flex',

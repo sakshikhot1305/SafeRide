@@ -76,16 +76,26 @@ const StudentManagement = () => {
       setBuses(busesRes.buses || []);
       setRoutes(routesRes.routes || []);
 
-      // Extract unique parents from populated students, or use default parent ID if available
-      const uniqueParents = [];
-      const parentMap = new Set();
+      // Fetch real parents from backend API
+      let parentList = [];
+      try {
+        const parentsRes = await studentService.getAllParents();
+        if (parentsRes && Array.isArray(parentsRes.parents)) {
+          parentList = parentsRes.parents;
+        }
+      } catch (parentErr) {
+        console.warn('Notice: Could not load parents list from API endpoint:', parentErr);
+      }
+
+      // Also preserve any parents from existing students
+      const seenParentMap = new Set(parentList.map((p) => (p._id ? p._id.toString() : p.toString())));
       (studentsRes.students || []).forEach((s) => {
-        if (s.parentId && s.parentId._id && !parentMap.has(s.parentId._id)) {
-          parentMap.add(s.parentId._id);
-          uniqueParents.push(s.parentId);
+        if (s.parentId && s.parentId._id && !seenParentMap.has(s.parentId._id.toString())) {
+          seenParentMap.add(s.parentId._id.toString());
+          parentList.push(s.parentId);
         }
       });
-      setParents(uniqueParents);
+      setParents(parentList);
     } catch (err) {
       console.error('Failed to load student management data:', err);
       addToast('Error loading students', 'error');
@@ -103,8 +113,8 @@ const StudentManagement = () => {
     setCurrentStudentId(null);
     setFormData({
       ...initialForm,
-      // Default to first known parent if available
-      parentId: parents.length > 0 ? parents[0]._id : '',
+      // Parent linking is optional - default to unlinked
+      parentId: '',
     });
     setIsAddEditOpen(true);
   };
@@ -138,7 +148,7 @@ const StudentManagement = () => {
         gender: formData.gender,
         className: formData.className.trim(),
         division: formData.division.trim().toUpperCase(),
-        parentId: formData.parentId,
+        parentId: formData.parentId || null,
         busId: formData.busId || null,
         routeId: formData.routeId || null,
         status: formData.status,
@@ -485,16 +495,15 @@ const StudentManagement = () => {
 
                 <div className="form-group">
                   <label className="form-label">
-                    Parent Account ID <span className="req">*</span>
+                    Parent Account <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(Optional)</span>
                   </label>
                   {parents.length > 0 ? (
                     <select
                       className="form-control"
-                      value={formData.parentId}
+                      value={formData.parentId || ''}
                       onChange={(e) => setFormData({ ...formData, parentId: e.target.value })}
-                      required
                     >
-                      <option value="">Select linked parent</option>
+                      <option value="">No Parent Linked (Optional)</option>
                       {parents.map((p) => (
                         <option key={p._id} value={p._id}>
                           {p.name} ({p.email})
@@ -502,14 +511,14 @@ const StudentManagement = () => {
                       ))}
                     </select>
                   ) : (
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="MongoDB ObjectId of parent user"
-                      value={formData.parentId}
-                      onChange={(e) => setFormData({ ...formData, parentId: e.target.value })}
-                      required
-                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      <select className="form-control" disabled>
+                        <option value="">No registered parent accounts in database</option>
+                      </select>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        No parents found. Parents can register on the signup page (or you can create one in User Accounts).
+                      </span>
+                    </div>
                   )}
                 </div>
 
@@ -518,7 +527,7 @@ const StudentManagement = () => {
                     <label className="form-label">Assigned Bus</label>
                     <select
                       className="form-control"
-                      value={formData.busId}
+                      value={formData.busId || ''}
                       onChange={(e) => setFormData({ ...formData, busId: e.target.value })}
                     >
                       <option value="">No bus assigned</option>
@@ -534,7 +543,7 @@ const StudentManagement = () => {
                     <label className="form-label">Transit Route</label>
                     <select
                       className="form-control"
-                      value={formData.routeId}
+                      value={formData.routeId || ''}
                       onChange={(e) => setFormData({ ...formData, routeId: e.target.value })}
                     >
                       <option value="">No route assigned</option>

@@ -20,8 +20,10 @@ import DashboardHeader from '../../components/layout/DashboardHeader';
 import LeafletMap from '../../components/maps/LeafletMap';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
+import ErrorBoundary from '../../components/common/ErrorBoundary';
 import studentService from '../../services/studentService';
 import trackingService from '../../services/trackingService';
+import notificationService from '../../services/notificationService';
 import { useToast } from '../../context/ToastContext';
 
 const LiveTracking = () => {
@@ -32,24 +34,43 @@ const LiveTracking = () => {
   const [selectedBusId, setSelectedBusId] = useState(initialBusId || null);
   const [trackingData, setTrackingData] = useState(null);
   const [etaData, setEtaData] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const { addToast } = useToast();
 
+  const getBusIdStr = (b) => {
+    if (!b) return null;
+    if (typeof b === 'string') return b;
+    return b._id ? b._id.toString() : null;
+  };
+
   // Load children to know their assigned buses
   useEffect(() => {
-    const fetchChildren = async () => {
+    const fetchInitialData = async () => {
       try {
-        const res = await studentService.getMyChildren();
-        const kids = res.students || [];
-        setChildren(kids);
+        const [kidsRes, notifsRes] = await Promise.allSettled([
+          studentService.getMyChildren(),
+          notificationService.getParentNotifications(),
+        ]);
+
+        let kids = [];
+        if (kidsRes.status === 'fulfilled') {
+          kids = kidsRes.value.students || [];
+          setChildren(kids);
+        }
+
+        if (notifsRes.status === 'fulfilled') {
+          const notifs = notifsRes.value.notifications || [];
+          setUnreadCount(notifs.filter((n) => !n.isRead).length);
+        }
 
         if (!selectedBusId) {
           const kidWithBus = kids.find((k) => k.busId);
           if (kidWithBus && kidWithBus.busId) {
-            setSelectedBusId(kidWithBus.busId._id);
+            setSelectedBusId(getBusIdStr(kidWithBus.busId));
           }
         }
       } catch (err) {
@@ -59,7 +80,7 @@ const LiveTracking = () => {
       }
     };
 
-    fetchChildren();
+    fetchInitialData();
   }, []);
 
   // Poll bus location & arrival prediction
@@ -103,10 +124,10 @@ const LiveTracking = () => {
     if (selectedBusId) {
       fetchLocation(selectedBusId, false);
 
-      // Periodic polling every 12 seconds
+      // Periodic polling every 6 seconds for smooth tracking updates
       const timer = setInterval(() => {
         fetchLocation(selectedBusId, false);
-      }, 12000);
+      }, 6000);
 
       return () => clearInterval(timer);
     }
@@ -115,7 +136,7 @@ const LiveTracking = () => {
   if (loading) {
     return (
       <>
-        <DashboardHeader title="Live Bus GPS Tracking" subtitle="Locating school transit..." />
+        <DashboardHeader title="Live Bus GPS Tracking" subtitle="Locating school transit..." unreadCount={unreadCount} />
         <div className="dashboard-content">
           <LoadingSpinner text="Connecting to vehicle tracking system..." />
         </div>
@@ -123,29 +144,53 @@ const LiveTracking = () => {
     );
   }
 
-  // Get active route stops from the child associated with this bus
-  const activeChild = children.find((c) => c.busId?._id === selectedBusId);
-  const routeStops = activeChild?.routeId?.stops || [];
-  const busInfo = activeChild?.busId || trackingData?.busId;
+  // Get active child associated with this bus
+  const activeChild = children.find(
+    (c) => getBusIdStr(c.busId) === selectedBusId?.toString()
+  );
+
+  // Route stops: prefer active child stops, fallback to etaData.routeStops or etaData.route.stops
+  const routeStops =
+    activeChild?.routeId?.stops && Array.isArray(activeChild.routeId.stops) && activeChild.routeId.stops.length > 0
+      ? activeChild.routeId.stops
+      : etaData?.routeStops || etaData?.route?.stops || [];
+
+  const busInfo = activeChild?.busId || trackingData?.busId || etaData;
 
   // Distinct buses among children
   const availableBuses = [];
   const seenBuses = new Set();
+
   children.forEach((c) => {
-    if (c.busId && !seenBuses.has(c.busId._id)) {
-      seenBuses.add(c.busId._id);
+    const bId = getBusIdStr(c.busId);
+    if (bId && !seenBuses.has(bId)) {
+      seenBuses.add(bId);
+      const busObj = typeof c.busId === 'object' ? c.busId : { _id: bId, busNumber: 'Assigned Bus' };
       availableBuses.push({
-        ...c.busId,
+        ...busObj,
+        _id: bId,
         childName: c.name,
       });
     }
   });
+
+  // If a busId is selected/in URL but wasn't in children list, ensure availableBuses includes it so it renders
+  if (selectedBusId && !seenBuses.has(selectedBusId)) {
+    const fallbackBus = trackingData?.busId || etaData;
+    availableBuses.push({
+      _id: selectedBusId,
+      busNumber: fallbackBus?.busNumber || 'School Bus',
+      registrationNumber: fallbackBus?.registrationNumber || '',
+      childName: activeChild?.name || 'Your Student',
+    });
+  }
 
   return (
     <>
       <DashboardHeader
         title="Live School Bus GPS Tracking & AI Arrival Prediction"
         subtitle="Real-time telemetry, machine learning arrival time estimation, and route delay alerts"
+        unreadCount={unreadCount}
       />
 
       <div className="dashboard-content" style={{ maxWidth: '1000px', margin: '0 auto' }}>
@@ -311,7 +356,7 @@ const LiveTracking = () => {
                         backgroundColor: etaData?.predictionStatus === 'Available' ? '#22C55E' : '#F59E0B',
                       }}
                     />
-                    Prediction: {etaData?.predictionStatus || 'Temporarily Unavailable'}
+                    Prediction: {etaData?.predictionStatus || 'Active Physics Calculation'}
                   </span>
 
                   {etaData?.predictionSource && (
@@ -399,7 +444,7 @@ const LiveTracking = () => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.35rem' }}>
                     <MapPin size={18} color="var(--secondary-blue)" />
                     <span style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--primary-navy)' }}>
-                      {etaData?.nextStop?.name || 'Awaiting Route Data'}
+                      {etaData?.nextStop?.name || 'Awaiting Target Stop'}
                     </span>
                   </div>
                   {etaData?.distanceToNextStopKm !== undefined && (
@@ -499,17 +544,20 @@ const LiveTracking = () => {
 
             {/* Interactive Leaflet Map with Highlighted Next Stop */}
             <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
-              <LeafletMap
-                latitude={trackingData?.latitude}
-                longitude={trackingData?.longitude}
-                speed={trackingData?.speed}
-                lastUpdated={trackingData?.lastUpdated}
-                busNumber={busInfo ? busInfo.busNumber : 'School Bus'}
-                routeStops={routeStops}
-                nextStop={etaData?.nextStop}
-                predictedEtaMinutes={etaData?.predictedEtaMinutes}
-                height="450px"
-              />
+              <ErrorBoundary title="Live Map Display" message="Map preview temporarily reloading coordinates.">
+                <LeafletMap
+                  latitude={trackingData?.latitude}
+                  longitude={trackingData?.longitude}
+                  speed={trackingData?.speed}
+                  lastUpdated={trackingData?.lastUpdated}
+                  busNumber={busInfo ? busInfo.busNumber : 'School Bus'}
+                  registrationNumber={busInfo?.registrationNumber || ''}
+                  routeStops={routeStops}
+                  nextStop={etaData?.nextStop}
+                  predictedEtaMinutes={etaData?.predictedEtaMinutes}
+                  height="450px"
+                />
+              </ErrorBoundary>
             </div>
 
             {/* Telemetry Details */}

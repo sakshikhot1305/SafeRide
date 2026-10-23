@@ -243,14 +243,29 @@ const deleteDriver = async (req, res) => {
 const getMyDriverProfile = async (req, res) => {
     try {
         const userId = req.user.id || req.user._id || req.user.userId;
-        const driver = await Driver.findOne({ userId })
+        let driver = await Driver.findOne({ userId })
             .populate("userId", "name email role")
             .populate("busId");
 
         if (!driver) {
-            return res.status(404).json({
-                message: "Driver profile not found"
-            });
+            const user = await User.findById(userId);
+            if (user && user.role === "driver") {
+                driver = await Driver.create({
+                    userId: user._id,
+                    licenseNumber: `DL-${user._id.toString().slice(-6).toUpperCase()}`,
+                    phone: "Not Provided",
+                    address: "Not Provided",
+                    busId: null,
+                    status: "Available"
+                });
+                driver = await Driver.findById(driver._id)
+                    .populate("userId", "name email role")
+                    .populate("busId");
+            } else {
+                return res.status(404).json({
+                    message: "Driver profile not found"
+                });
+            }
         }
 
         return res.status(200).json({ driver });
@@ -269,8 +284,8 @@ const getMyBusStudents = async (req, res) => {
         const driver = await Driver.findOne({ userId });
 
         if (!driver || !driver.busId) {
-            return res.status(404).json({
-                message: "Driver or assigned bus not found",
+            return res.status(200).json({
+                message: "No bus assigned to driver",
                 students: []
             });
         }

@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Bell,
   CheckCircle2,
   Clock,
   RefreshCw,
   AlertCircle,
+  AlertTriangle,
   CheckCheck,
   Filter,
+  Radio,
+  Bus,
+  Navigation,
 } from 'lucide-react';
 import DashboardHeader from '../../components/layout/DashboardHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -18,7 +23,7 @@ const Notifications = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filterType, setFilterType] = useState('ALL'); // 'ALL', 'UNREAD', 'BOARDING', 'DROPOFF'
+  const [filterType, setFilterType] = useState('ALL'); // 'ALL', 'UNREAD', 'TRIP', 'BOARDING', 'DROPOFF', 'DELAY'
 
   const { addToast } = useToast();
 
@@ -41,7 +46,7 @@ const Notifications = () => {
     loadNotifications();
     const interval = setInterval(() => {
       loadNotifications(false);
-    }, 20000);
+    }, 10000); // 10s poll for fresher notifications
     return () => clearInterval(interval);
   }, []);
 
@@ -75,8 +80,10 @@ const Notifications = () => {
 
   const filtered = notifications.filter((n) => {
     if (filterType === 'UNREAD') return !n.isRead;
+    if (filterType === 'TRIP') return n.type === 'TRIP';
     if (filterType === 'BOARDING') return n.type === 'BOARDING';
     if (filterType === 'DROPOFF') return n.type === 'DROPOFF';
+    if (filterType === 'DELAY') return n.type === 'DELAY';
     return true;
   });
 
@@ -114,6 +121,12 @@ const Notifications = () => {
               Unread ({unreadCount})
             </button>
             <button
+              onClick={() => setFilterType('TRIP')}
+              className={`btn btn-sm ${filterType === 'TRIP' ? 'btn-primary' : 'btn-outline'}`}
+            >
+              Transit Trips
+            </button>
+            <button
               onClick={() => setFilterType('BOARDING')}
               className={`btn btn-sm ${filterType === 'BOARDING' ? 'btn-primary' : 'btn-outline'}`}
             >
@@ -124,6 +137,12 @@ const Notifications = () => {
               className={`btn btn-sm ${filterType === 'DROPOFF' ? 'btn-primary' : 'btn-outline'}`}
             >
               Drop-offs
+            </button>
+            <button
+              onClick={() => setFilterType('DELAY')}
+              className={`btn btn-sm ${filterType === 'DELAY' ? 'btn-primary' : 'btn-outline'}`}
+            >
+              Delays
             </button>
           </div>
 
@@ -163,6 +182,38 @@ const Notifications = () => {
             {filtered.map((notif) => {
               const isBoarding = notif.type === 'BOARDING';
               const isDropoff = notif.type === 'DROPOFF';
+              const isTrip = notif.type === 'TRIP';
+              const isDelay = notif.type === 'DELAY';
+
+              const borderColor = isBoarding
+                ? 'var(--secondary-blue)'
+                : isDropoff
+                ? 'var(--success)'
+                : isTrip
+                ? '#0284C7'
+                : isDelay
+                ? 'var(--error)'
+                : 'var(--warning)';
+
+              const iconBg = isBoarding
+                ? 'var(--sky-blue-light)'
+                : isDropoff
+                ? '#DCFCE7'
+                : isTrip
+                ? '#E0F2FE'
+                : isDelay
+                ? '#FEE2E2'
+                : '#FEF3C7';
+
+              const iconColor = isBoarding
+                ? 'var(--secondary-blue)'
+                : isDropoff
+                ? 'var(--success)'
+                : isTrip
+                ? '#0284C7'
+                : isDelay
+                ? 'var(--error)'
+                : 'var(--warning)';
 
               return (
                 <div
@@ -171,9 +222,7 @@ const Notifications = () => {
                   style={{
                     padding: '1.25rem 1.5rem',
                     backgroundColor: notif.isRead ? '#FFFFFF' : 'var(--warm-cream)',
-                    borderLeft: `5px solid ${
-                      isBoarding ? 'var(--secondary-blue)' : isDropoff ? 'var(--success)' : 'var(--warning)'
-                    }`,
+                    borderLeft: `5px solid ${borderColor}`,
                     display: 'flex',
                     alignItems: 'flex-start',
                     justifyContent: 'space-between',
@@ -183,25 +232,43 @@ const Notifications = () => {
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', flex: 1 }}>
                     <div
                       style={{
-                        width: '40px',
-                        height: '40px',
+                        width: '42px',
+                        height: '42px',
                         borderRadius: 'var(--radius-md)',
-                        backgroundColor: isBoarding ? 'var(--sky-blue-light)' : isDropoff ? '#DCFCE7' : '#FEF3C7',
-                        color: isBoarding ? 'var(--secondary-blue)' : isDropoff ? 'var(--success)' : 'var(--warning)',
+                        backgroundColor: iconBg,
+                        color: iconColor,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         flexShrink: 0,
                       }}
                     >
-                      {isBoarding ? <Bus size={20} /> : isDropoff ? <CheckCircle2 size={20} /> : <Bell size={20} />}
+                      {isTrip ? (
+                        <Radio size={20} />
+                      ) : isBoarding ? (
+                        <Bus size={20} />
+                      ) : isDropoff ? (
+                        <CheckCircle2 size={20} />
+                      ) : isDelay ? (
+                        <AlertTriangle size={20} />
+                      ) : (
+                        <Bell size={20} />
+                      )}
                     </div>
 
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
                         <span
                           className={`badge ${
-                            isBoarding ? 'badge-info' : isDropoff ? 'badge-success' : 'badge-warning'
+                            isBoarding
+                              ? 'badge-info'
+                              : isDropoff
+                              ? 'badge-success'
+                              : isTrip
+                              ? 'badge-primary'
+                              : isDelay
+                              ? 'badge-error'
+                              : 'badge-warning'
                           }`}
                           style={{ fontSize: '0.7rem' }}
                         >
@@ -256,15 +323,27 @@ const Notifications = () => {
                     </div>
                   </div>
 
-                  {!notif.isRead && (
-                    <button
-                      onClick={() => handleMarkAsRead(notif._id)}
-                      className="btn btn-outline btn-sm"
-                      style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', flexShrink: 0 }}
-                    >
-                      Mark Read
-                    </button>
-                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end', flexShrink: 0 }}>
+                    {(isTrip || isDelay) && (
+                      <Link
+                        to="/parent/tracking"
+                        className="btn btn-primary btn-sm"
+                        style={{ fontSize: '0.75rem', padding: '0.3rem 0.65rem', gap: '0.3rem' }}
+                      >
+                        <Navigation size={13} /> Live Bus Map
+                      </Link>
+                    )}
+
+                    {!notif.isRead && (
+                      <button
+                        onClick={() => handleMarkAsRead(notif._id)}
+                        className="btn btn-outline btn-sm"
+                        style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                      >
+                        Mark Read
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}

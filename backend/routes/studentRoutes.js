@@ -4,6 +4,7 @@ const express = require("express");
 const {
     createStudent,
     getAllStudents,
+    getAllParents,
     getStudentById,
     updateStudent,
     deleteStudent,
@@ -29,6 +30,15 @@ router.post(
     authMiddleware,
     roleMiddleware("admin"),
     createStudent
+);
+
+
+// Get all parents - Admin only
+router.get(
+    "/parents",
+    authMiddleware,
+    roleMiddleware("admin"),
+    getAllParents
 );
 
 // Get all students - Admin only

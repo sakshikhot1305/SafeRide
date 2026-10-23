@@ -1,6 +1,11 @@
 import api from './api';
 
 export const studentService = {
+  getAllParents: async () => {
+    const response = await api.get('/api/students/parents');
+    return response.data;
+  },
+
   getAllStudents: async () => {
     const response = await api.get('/api/students');
     return response.data;

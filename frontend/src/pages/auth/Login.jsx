@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Bus,
   Mail,
@@ -8,12 +8,6 @@ import {
   EyeOff,
   LogIn,
   AlertCircle,
-  ArrowRight,
-  ShieldCheck,
-  UserCheck,
-  Users,
-  Shield,
-  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -24,29 +18,11 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [selectedDemoRole, setSelectedDemoRole] = useState(null);
 
   const { login } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
-
-  const handleDemoSelect = (role) => {
-    setSelectedDemoRole(role);
-    setError('');
-    if (role === 'admin') {
-      setEmail('admin@saferide.com');
-      setPassword('Admin@123');
-      addToast('Loaded Admin Demo Credentials (admin@saferide.com)', 'info', 2500);
-    } else if (role === 'driver') {
-      setEmail('rahul.driver@example.com');
-      setPassword('Driver@123');
-      addToast('Loaded Driver Demo Credentials (rahul.driver@example.com)', 'info', 2500);
-    } else if (role === 'parent') {
-      setEmail('testparent@gmail.com');
-      setPassword('SafeRide@123');
-      addToast('Loaded Parent Demo Credentials (testparent@gmail.com)', 'info', 2500);
-    }
-  };
+  
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -161,87 +137,11 @@ const Login = () => {
               Sign In to Your Portal
             </h2>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-              Select a role below or enter your registered email.
+              Enter your registered email and password to access your dashboard.
             </p>
           </div>
 
-          {/* Quick-Fill Demo Pills */}
-          <div style={{ marginBottom: '1.5rem', background: 'var(--bg-main)', padding: '0.85rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.65rem' }}>
-              <Sparkles size={14} color="var(--secondary-blue)" />
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                One-Click Evaluation Demo:
-              </span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
-              <button
-                type="button"
-                onClick={() => handleDemoSelect('admin')}
-                style={{
-                  padding: '0.5rem 0.4rem',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid',
-                  borderColor: selectedDemoRole === 'admin' ? 'var(--primary-navy)' : 'var(--border-color)',
-                  backgroundColor: selectedDemoRole === 'admin' ? 'var(--primary-navy)' : '#FFFFFF',
-                  color: selectedDemoRole === 'admin' ? '#FFFFFF' : 'var(--primary-navy)',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.3rem',
-                  transition: 'all 0.2s',
-                }}
-              >
-                <Shield size={12} /> Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDemoSelect('driver')}
-                style={{
-                  padding: '0.5rem 0.4rem',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid',
-                  borderColor: selectedDemoRole === 'driver' ? 'var(--secondary-blue)' : 'var(--border-color)',
-                  backgroundColor: selectedDemoRole === 'driver' ? 'var(--secondary-blue)' : '#FFFFFF',
-                  color: selectedDemoRole === 'driver' ? '#FFFFFF' : 'var(--secondary-blue)',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.3rem',
-                  transition: 'all 0.2s',
-                }}
-              >
-                <Bus size={12} /> Driver
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDemoSelect('parent')}
-                style={{
-                  padding: '0.5rem 0.4rem',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid',
-                  borderColor: selectedDemoRole === 'parent' ? '#D97706' : 'var(--border-color)',
-                  backgroundColor: selectedDemoRole === 'parent' ? '#D97706' : '#FFFFFF',
-                  color: selectedDemoRole === 'parent' ? '#FFFFFF' : '#D97706',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.3rem',
-                  transition: 'all 0.2s',
-                }}
-              >
-                <Users size={12} /> Parent
-              </button>
-            </div>
-          </div>
+          
 
           {error && (
             <div

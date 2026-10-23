@@ -23,7 +23,7 @@ function getHaversineDistanceKm(lat1, lon1, lat2, lon2) {
 // Driver updates the bus's current location
 const updateLocation = async (req, res) => {
     try {
-        const { latitude, longitude, speed } = req.body;
+        const { latitude, longitude, speed, isTripStart } = req.body;
 
         const lat = Number(latitude);
         const lng = Number(longitude);
@@ -70,6 +70,13 @@ const updateLocation = async (req, res) => {
             });
         }
 
+        // Determine if this is the beginning of a transit trip
+        const priorTracking = await BusTracking.findOne({ busId: driver.busId });
+        const lastUpdatedMs = priorTracking?.lastUpdated ? new Date(priorTracking.lastUpdated).getTime() : 0;
+        const minutesSinceLastUpdate = (Date.now() - lastUpdatedMs) / (1000 * 60);
+
+        const isNewTripSession = isTripStart || !priorTracking || minutesSinceLastUpdate > 15;
+
         const tracking = await BusTracking.findOneAndUpdate(
             { busId: driver.busId },
             {
@@ -88,6 +95,36 @@ const updateLocation = async (req, res) => {
                 setDefaultsOnInsert: true
             }
         );
+
+        // When a new trip broadcast begins, notify parents of all assigned students
+        if (isNewTripSession) {
+            try {
+                const assignedStudents = await Student.find({ busId: driver.busId, status: "Active" });
+                const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+
+                for (const student of assignedStudents) {
+                    if (student.parentId) {
+                        const recentAlert = await Notification.findOne({
+                            parentId: student.parentId,
+                            studentId: student._id,
+                            type: "TRIP",
+                            createdAt: { $gte: fifteenMinutesAgo }
+                        });
+
+                        if (!recentAlert) {
+                            await Notification.create({
+                                parentId: student.parentId,
+                                studentId: student._id,
+                                message: `Bus ${bus.busNumber} has started sharing live GPS location and begun its transit route.`,
+                                type: "TRIP"
+                            });
+                        }
+                    }
+                }
+            } catch (notifErr) {
+                console.error("Notice: Could not dispatch trip start notification:", notifErr.message);
+            }
+        }
 
         return res.status(200).json({
             message: "Bus location updated successfully",
@@ -195,6 +232,8 @@ const getBusETA = async (req, res) => {
                 busId: bus._id,
                 busNumber: bus.busNumber,
                 registrationNumber: bus.registrationNumber,
+                route: null,
+                routeStops: [],
                 predictionStatus: "Temporarily Unavailable",
                 message: "No route stops configured for this bus transit.",
                 currentLocation: {
@@ -378,6 +417,14 @@ const getBusETA = async (req, res) => {
             busId: bus._id,
             busNumber: bus.busNumber,
             registrationNumber: bus.registrationNumber,
+            route: route ? {
+                _id: route._id,
+                routeName: route.routeName,
+                startPoint: route.startPoint,
+                endPoint: route.endPoint,
+                stops
+            } : null,
+            routeStops: stops,
             currentLocation: {
                 latitude: tracking.latitude,
                 longitude: tracking.longitude,

@@ -19,13 +19,13 @@ const driverSchema = new mongoose.Schema(
 
         phone: {
             type: String,
-            required: true,
+            default: "Not Provided",
             trim: true
         },
 
         address: {
             type: String,
-            required: true,
+            default: "Not Provided",
             trim: true
         },
 

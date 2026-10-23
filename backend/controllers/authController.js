@@ -1,3 +1,4 @@
+const Driver = require("../models/Driver");
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -35,12 +36,26 @@ const registerUser = async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        
         const user = await User.create({
             name,
             email: normalizedEmail,
             password: hashedPassword,
             role
         });
+
+        // If driver role, automatically create corresponding Driver record
+        if (role === "driver") {
+            const license = req.body.licenseNumber?.trim() || `DL-${user._id.toString().slice(-6).toUpperCase()}`;
+            await Driver.create({
+                userId: user._id,
+                licenseNumber: license,
+                phone: req.body.phone?.trim() || "Not Provided",
+                address: req.body.address?.trim() || "Not Provided",
+                busId: null,
+                status: "Available"
+            });
+        }
 
         res.status(201).json({
             message: "User registered successfully",
@@ -83,12 +98,28 @@ const loginUser = async (req, res) => {
             });
         }
 
+        
         const isMatch = await bcrypt.compare(password, user.password);
 
         if (!isMatch) {
             return res.status(401).json({
                 message: "Invalid email or password"
             });
+        }
+
+        // If driver role, ensure a linked Driver profile exists
+        if (user.role === "driver") {
+            const existingDriver = await Driver.findOne({ userId: user._id });
+            if (!existingDriver) {
+                await Driver.create({
+                    userId: user._id,
+                    licenseNumber: `DL-${user._id.toString().slice(-6).toUpperCase()}`,
+                    phone: "Not Provided",
+                    address: "Not Provided",
+                    busId: null,
+                    status: "Available"
+                });
+            }
         }
 
         // Generate JWT token
